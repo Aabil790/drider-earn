@@ -20,6 +20,8 @@ const Dashboard = () => {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [whatsappLink, setWhatsappLink] = useState('');
   const [copied, setCopied] = useState(false);
+  const [myRank, setMyRank] = useState(null);
+  const [topEarners, setTopEarners] = useState([]);
 
   useEffect(() => {
     if (!user.is_paid) {
@@ -28,6 +30,8 @@ const Dashboard = () => {
     } else {
       fetchReferralStats();
       fetchWhatsappLink();
+      fetchMyRank();
+      fetchTopEarners();
     }
   }, [user]);
 
@@ -55,6 +59,24 @@ const Dashboard = () => {
       setWhatsappLink(response.data.whatsapp_group_link);
     } catch (error) {
       console.error('Failed to fetch WhatsApp link');
+    }
+  };
+
+  const fetchMyRank = async () => {
+    try {
+      const response = await api.get('/leaderboard/my-rank');
+      setMyRank(response.data);
+    } catch (error) {
+      console.error('Failed to fetch rank');
+    }
+  };
+
+  const fetchTopEarners = async () => {
+    try {
+      const response = await api.get('/leaderboard/top-earners?limit=20');
+      setTopEarners(response.data);
+    } catch (error) {
+      console.error('Failed to fetch top earners');
     }
   };
 
@@ -288,6 +310,86 @@ const Dashboard = () => {
             </CardHeader>
           </Card>
         </div>
+
+        {myRank && (
+          <Card className="mt-8 bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <TrendingUp className="h-6 w-6" />
+                Your Ranking
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-3xl font-bold">#{myRank.rank}</div>
+                  <p className="text-sm text-white/80">Your Rank</p>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold">₹{myRank.earnings.toFixed(2)}</div>
+                  <p className="text-sm text-white/80">Total Earnings</p>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold">{myRank.total_users}</div>
+                  <p className="text-sm text-white/80">Total Users</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {topEarners.length > 0 && (
+          <Card className="mt-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-6 w-6 text-yellow-600" />
+                Top 20 Earners - Leaderboard
+              </CardTitle>
+              <CardDescription>See who's leading the earnings race!</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {topEarners.map((earner) => (
+                  <div
+                    key={earner.user_id}
+                    className={`flex items-center justify-between p-3 rounded-lg ${
+                      earner.user_id === user.id
+                        ? 'bg-yellow-100 border-2 border-yellow-500'
+                        : earner.rank <= 3
+                        ? 'bg-gradient-to-r from-yellow-50 to-orange-50'
+                        : 'bg-gray-50'
+                    }`}
+                    data-testid={`leaderboard-rank-${earner.rank}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                        earner.rank === 1 ? 'bg-yellow-500 text-white' :
+                        earner.rank === 2 ? 'bg-gray-300 text-gray-800' :
+                        earner.rank === 3 ? 'bg-orange-400 text-white' :
+                        'bg-gray-200 text-gray-700'
+                      }`}>
+                        {earner.rank === 1 ? '🏆' : earner.rank === 2 ? '🥈' : earner.rank === 3 ? '🥉' : `#${earner.rank}`}
+                      </div>
+                      <div>
+                        <p className="font-semibold">
+                          {earner.user_id === user.id ? `${earner.name} (You)` : earner.name}
+                        </p>
+                        {earner.rank <= 3 && (
+                          <p className="text-xs text-gray-600">
+                            {earner.rank === 1 ? 'Top Earner 💪' : earner.rank === 2 ? 'Amazing!' : 'Great Job!'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-yellow-600">₹{typeof earner.earnings === 'number' ? earner.earnings.toFixed(2) : earner.earnings}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <script src="https://checkout.razorpay.com/v1/checkout.js"></script>

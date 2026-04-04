@@ -2,11 +2,31 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
-import { ArrowRight, Video, Gift, ShoppingBag, Wallet, Users, TrendingUp } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ArrowRight, Video, Gift, ShoppingBag, Wallet, Users, TrendingUp, Trophy } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND_URL}/api`;
 
 const Landing = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [topEarners, setTopEarners] = useState([]);
+
+  useEffect(() => {
+    fetchTopEarners();
+  }, []);
+
+  const fetchTopEarners = async () => {
+    try {
+      const response = await axios.get(`${API}/leaderboard/top-earners?limit=50`);
+      setTopEarners(response.data);
+    } catch (error) {
+      console.error('Failed to fetch top earners');
+    }
+  };
 
   const features = [
     {
@@ -167,6 +187,81 @@ const Landing = () => {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gray-50">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <Trophy className="h-10 w-10 text-yellow-600" />
+              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">Top 50 Earners</h2>
+            </div>
+            <p className="text-lg text-gray-600">Join the league of top earners and get featured here!</p>
+          </div>
+
+          {topEarners.length > 0 ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {topEarners.map((earner) => (
+                <Card
+                  key={earner.user_id}
+                  className={`${
+                    earner.rank <= 3
+                      ? 'bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-400'
+                      : 'bg-white'
+                  } hover:shadow-md transition-shadow`}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
+                          earner.rank === 1 ? 'bg-yellow-500 text-white' :
+                          earner.rank === 2 ? 'bg-gray-300 text-gray-800' :
+                          earner.rank === 3 ? 'bg-orange-400 text-white' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {earner.rank <= 3 ? (
+                            earner.rank === 1 ? '🏆' : earner.rank === 2 ? '🥈' : '🥉'
+                          ) : (
+                            `#${earner.rank}`
+                          )}
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">{earner.name}</CardTitle>
+                          {earner.rank <= 3 && (
+                            <p className="text-xs text-yellow-700 font-semibold">
+                              {earner.rank === 1 ? '👑 Champion' : earner.rank === 2 ? '⭐ Runner Up' : '🎯 Bronze'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-yellow-600">₹{typeof earner.earnings === 'number' ? earner.earnings.toFixed(0) : earner.earnings}</p>
+                        <p className="text-xs text-gray-500">Total Earned</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-gray-600">Be the first to earn and get featured on the leaderboard!</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {!user && (
+            <div className="text-center mt-8">
+              <Button
+                onClick={() => navigate('/signup')}
+                className="bg-yellow-500 hover:bg-yellow-400 text-black font-semibold px-8 py-6 text-lg rounded-xl"
+              >
+                Join & Start Earning Now <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </div>
+          )}
         </div>
       </section>
 

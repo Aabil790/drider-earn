@@ -310,6 +310,45 @@ async def get_referral_stats(current_user = Depends(get_current_user)):
         "referrals": referrals
     }
 
+@api_router.get("/leaderboard/top-earners")
+async def get_top_earners(limit: int = 50):
+    users = await db.users.find(
+        {"is_paid": True},
+        {"_id": 0, "name": "1", "wallet_balance": "1", "id": "1"}
+    ).sort("wallet_balance", -1).limit(limit).to_list(limit)
+    
+    leaderboard = []
+    for idx, user in enumerate(users, 1):
+        leaderboard.append({
+            "rank": idx,
+            "name": user.get("name", "User"),
+            "earnings": user.get("wallet_balance", 0),
+            "user_id": user.get("id")
+        })
+    
+    return leaderboard
+
+@api_router.get("/leaderboard/my-rank")
+async def get_my_rank(current_user = Depends(get_current_user)):
+    all_users = await db.users.find(
+        {"is_paid": True},
+        {"_id": 0, "id": "1", "wallet_balance": "1"}
+    ).sort("wallet_balance", -1).to_list(10000)
+    
+    my_rank = None
+    total_users = len(all_users)
+    
+    for idx, user in enumerate(all_users, 1):
+        if user["id"] == current_user["id"]:
+            my_rank = idx
+            break
+    
+    return {
+        "rank": my_rank,
+        "total_users": total_users,
+        "earnings": current_user["wallet_balance"]
+    }
+
 @api_router.get("/cashback-products")
 async def get_cashback_products(current_user = Depends(get_current_user)):
     if not current_user["is_paid"]:
