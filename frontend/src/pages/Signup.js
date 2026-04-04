@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -9,11 +9,15 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { toast } from 'sonner';
 
 const Signup = () => {
+  const [searchParams] = useSearchParams();
+  const referralCode = searchParams.get('ref');
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     mobile: '',
     password: '',
+    referred_by_code: referralCode || '',
   });
   const [loading, setLoading] = useState(false);
   const { setUser } = useAuth();
@@ -99,6 +103,23 @@ const Signup = () => {
                 required
                 data-testid="signup-password-input"
               />
+            </div>
+            <div>
+              <Label htmlFor="referred_by_code">Referral Code (Optional)</Label>
+              <Input
+                id="referred_by_code"
+                name="referred_by_code"
+                type="text"
+                placeholder="Enter referral code if you have one"
+                value={formData.referred_by_code}
+                onChange={handleChange}
+                data-testid="signup-referral-input"
+              />
+              {referralCode && (
+                <p className="text-xs text-green-600 mt-1">
+                  ✓ Referral code applied
+                </p>
+              )}
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">

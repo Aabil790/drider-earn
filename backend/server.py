@@ -72,6 +72,7 @@ class SignupRequest(BaseModel):
     mobile: str
     password: str
     name: str
+    referred_by_code: Optional[str] = None
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -128,6 +129,14 @@ class WithdrawalRequest(BaseModel):
 class SettingsUpdate(BaseModel):
     whatsapp_group_link: Optional[str] = None
 
+class CashbackProofSubmit(BaseModel):
+    cashback_click_id: str
+    order_id: str
+    order_date: str
+    screenshot_url: str
+    review_link: Optional[str] = None
+    notes: Optional[str] = None
+
 @api_router.get("/")
 async def root():
     return {"message": "Drider API"}
@@ -151,6 +160,7 @@ async def signup(req: SignupRequest):
         "membership_plan": "none",
         "is_paid": False,
         "referral_code": referral_code,
+        "referred_by_code": req.referred_by_code,
         "wallet_balance": 0.0,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -269,6 +279,54 @@ async def verify_membership_payment(req: VerifyPaymentRequest, current_user = De
             "created_at": datetime.now(timezone.utc).isoformat()
         })
         
+        # Process referral commission
+        referral_code = current_user.get("referred_by_code")
+        if referral_code:
+            referrer = await db.users.find_one({"referral_code": referral_code}, {"_id": 0})
+            if referrer:
+                # Commission based on plan
+                commission_percent = 0.40 if req.plan == "premium" else 0.30
+                commission_amount = amount * commission_percent
+                
+                # Add commission to referrer's wallet
+                await db.users.update_one(
+                    {"id": referrer["id"]},
+                    {"$inc": {"wallet_balance": commission_amount}}
+                )
+                
+                # Record referral
+                referral_doc = {
+                    "id": str(uuid.uuid4()),
+                    "referrer_id": referrer["id"],
+                    "referred_user_id": current_user["id"],
+                    "plan_type": req.plan,
+                    "earned_amount": commission_amount,
+                    "commission_percent": int(commission_percent * 100),
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.referrals.insert_one(referral_doc)
+                
+                # Transaction record for referrer
+                await db.transactions.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "user_id": referrer["id"],
+                    "type": "earning",
+                    "amount": commission_amount,
+                    "status": "completed",
+                    "description": f"Referral commission ({req.plan} plan) - {int(commission_percent * 100)}%",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+                
+                # Notification to referrer
+                await db.notifications.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "user_id": referrer["id"],
+                    "title": "Referral Earnings!",
+                    "message": f"You earned ₹{commission_amount} from {current_user['name']}'s {req.plan} membership!",
+                    "read": False,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+        
         await db.notifications.insert_one({
             "id": str(uuid.uuid4()),
             "user_id": current_user["id"],
@@ -303,18 +361,43 @@ async def get_my_referral_code(current_user = Depends(get_current_user)):
 @api_router.get("/referrals/stats")
 async def get_referral_stats(current_user = Depends(get_current_user)):
     referrals = await db.referrals.find({"referrer_id": current_user["id"]}, {"_id": 0}).to_list(1000)
+    
     total_earnings = sum([r.get("earned_amount", 0) for r in referrals])
+    basic_referrals = [r for r in referrals if r.get("plan_type") == "basic"]
+    premium_referrals = [r for r in referrals if r.get("plan_type") == "premium"]
+    
+    basic_earnings = sum([r.get("earned_amount", 0) for r in basic_referrals])
+    premium_earnings = sum([r.get("earned_amount", 0) for r in premium_referrals])
+    
     return {
         "total_referrals": len(referrals),
         "total_earnings": total_earnings,
+        "basic_plan_referrals": len(basic_referrals),
+        "basic_plan_earnings": basic_earnings,
+        "premium_plan_referrals": len(premium_referrals),
+        "premium_plan_earnings": premium_earnings,
         "referrals": referrals
     }
 
 @api_router.get("/leaderboard/top-earners")
-async def get_top_earners(limit: int = 50):
+async def get_top_earners(limit: int = 50, filter: str = "all"):
+    # Calculate date filter
+    now = datetime.now(timezone.utc)
+    date_filter = {}
+    
+    if filter == "daily":
+        start_date = now - timedelta(days=1)
+        date_filter = {"created_at": {"$gte": start_date.isoformat()}}
+    elif filter == "weekly":
+        start_date = now - timedelta(days=7)
+        date_filter = {"created_at": {"$gte": start_date.isoformat()}}
+    elif filter == "monthly":
+        start_date = now - timedelta(days=30)
+        date_filter = {"created_at": {"$gte": start_date.isoformat()}}
+    
     users = await db.users.find(
         {"is_paid": True},
-        {"_id": 0, "name": "1", "wallet_balance": "1", "id": "1"}
+        {"_id": 0, "name": "1", "wallet_balance": "1", "id": "1", "membership_plan": "1", "created_at": "1"}
     ).sort("wallet_balance", -1).limit(limit).to_list(limit)
     
     leaderboard = []
@@ -323,7 +406,9 @@ async def get_top_earners(limit: int = 50):
             "rank": idx,
             "name": user.get("name", "User"),
             "earnings": user.get("wallet_balance", 0),
-            "user_id": user.get("id")
+            "user_id": user.get("id"),
+            "membership_plan": user.get("membership_plan", "basic"),
+            "badge": "🏆" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else None
         })
     
     return leaderboard
@@ -347,6 +432,46 @@ async def get_my_rank(current_user = Depends(get_current_user)):
         "rank": my_rank,
         "total_users": total_users,
         "earnings": current_user["wallet_balance"]
+    }
+
+@api_router.get("/users/{user_id}/profile")
+async def get_user_profile(user_id: str, current_user = Depends(get_current_user)):
+    user = await db.users.find_one({"id": user_id, "is_paid": True}, {"_id": 0, "password": 0, "email": 0, "mobile": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get user stats
+    referrals = await db.referrals.find({"referrer_id": user_id}, {"_id": 0}).to_list(1000)
+    total_referrals = len(referrals)
+    
+    transactions = await db.transactions.find(
+        {"user_id": user_id, "type": "earning"},
+        {"_id": 0}
+    ).to_list(100)
+    total_transactions = len(transactions)
+    
+    # Get rank
+    all_users = await db.users.find(
+        {"is_paid": True},
+        {"_id": 0, "id": "1", "wallet_balance": "1"}
+    ).sort("wallet_balance", -1).to_list(10000)
+    
+    rank = None
+    for idx, u in enumerate(all_users, 1):
+        if u["id"] == user_id:
+            rank = idx
+            break
+    
+    return {
+        "name": user.get("name"),
+        "membership_plan": user.get("membership_plan"),
+        "wallet_balance": user.get("wallet_balance"),
+        "referral_code": user.get("referral_code"),
+        "created_at": user.get("created_at"),
+        "rank": rank,
+        "total_referrals": total_referrals,
+        "total_transactions": total_transactions,
+        "is_own_profile": user_id == current_user["id"]
     }
 
 @api_router.get("/cashback-products")
@@ -380,13 +505,107 @@ async def track_cashback_click(product_id: str, current_user = Depends(get_curre
 @api_router.get("/cashback/history")
 async def get_cashback_history(current_user = Depends(get_current_user)):
     clicks = await db.cashback_clicks.find({"user_id": current_user["id"]}, {"_id": 0}).to_list(100)
+    
+    # Enrich with product details and proof submission
+    for click in clicks:
+        product = await db.cashback_products.find_one({"id": click["product_id"]}, {"_id": 0})
+        if product:
+            click["product_title"] = product.get("title")
+            click["cashback_amount"] = product.get("cashback_amount")
+            click["refund_days"] = product.get("refund_days")
+        
+        # Get proof if submitted
+        proof = await db.cashback_proofs.find_one({"cashback_click_id": click["id"]}, {"_id": 0})
+        if proof:
+            click["proof_submitted"] = True
+            click["proof_status"] = proof.get("status", "pending")
+            click["order_id"] = proof.get("order_id")
+        else:
+            click["proof_submitted"] = False
+    
     return clicks
+
+@api_router.post("/cashback/submit-proof")
+async def submit_cashback_proof(req: CashbackProofSubmit, current_user = Depends(get_current_user)):
+    # Verify click belongs to user
+    click = await db.cashback_clicks.find_one({"id": req.cashback_click_id, "user_id": current_user["id"]}, {"_id": 0})
+    if not click:
+        raise HTTPException(status_code=404, detail="Cashback click not found")
+    
+    # Check if proof already submitted
+    existing_proof = await db.cashback_proofs.find_one({"cashback_click_id": req.cashback_click_id}, {"_id": 0})
+    if existing_proof:
+        raise HTTPException(status_code=400, detail="Proof already submitted")
+    
+    proof_doc = {
+        "id": str(uuid.uuid4()),
+        "cashback_click_id": req.cashback_click_id,
+        "user_id": current_user["id"],
+        "product_id": click["product_id"],
+        "order_id": req.order_id,
+        "order_date": req.order_date,
+        "screenshot_url": req.screenshot_url,
+        "review_link": req.review_link,
+        "notes": req.notes,
+        "status": "pending_review",
+        "review_completed": False,
+        "review_live": False,
+        "refund_processed": False,
+        "submitted_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    result = await db.cashback_proofs.insert_one(proof_doc)
+    proof_doc.pop('_id', None)
+    
+    # Create notification
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "title": "Cashback Proof Submitted",
+        "message": f"Your order proof for Order ID: {req.order_id} has been submitted for review.",
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return proof_doc
+
+@api_router.get("/cashback/proof-status/{click_id}")
+async def get_proof_status(click_id: str, current_user = Depends(get_current_user)):
+    proof = await db.cashback_proofs.find_one({"cashback_click_id": click_id, "user_id": current_user["id"]}, {"_id": 0})
+    if not proof:
+        return {"submitted": False}
+    
+    return {
+        "submitted": True,
+        "status": proof.get("status"),
+        "review_completed": proof.get("review_completed", False),
+        "review_live": proof.get("review_live", False),
+        "refund_processed": proof.get("refund_processed", False),
+        "order_id": proof.get("order_id"),
+        "submitted_at": proof.get("submitted_at")
+    }
 
 @api_router.get("/ecommerce/products")
 async def get_ecommerce_products(current_user = Depends(get_current_user)):
     if not current_user["is_paid"]:
         raise HTTPException(status_code=403, detail="Membership required")
+    
     products = await db.ecommerce_products.find({"stock": {"$gt": 0}}, {"_id": 0}).to_list(100)
+    
+    # Apply plan-based pricing
+    for product in products:
+        base_price = product.get("price", 0)
+        if current_user["membership_plan"] == "premium":
+            # Premium users get 15% discount
+            product["price"] = round(base_price * 0.85, 2)
+            product["original_price"] = base_price
+            product["discount_percent"] = 15
+        else:
+            # Basic users see regular price
+            product["price"] = base_price
+            product["original_price"] = None
+            product["discount_percent"] = 0
+    
     return products
 
 @api_router.get("/ecommerce/products/{product_id}")
@@ -599,7 +818,103 @@ async def approve_withdrawal(request_id: str, admin_user = Depends(get_admin_use
 @api_router.get("/admin/cashback-clicks")
 async def get_cashback_clicks(admin_user = Depends(get_admin_user)):
     clicks = await db.cashback_clicks.find({}, {"_id": 0}).sort("clicked_at", -1).to_list(100)
+    
+    # Enrich with proof data
+    for click in clicks:
+        proof = await db.cashback_proofs.find_one({"cashback_click_id": click["id"]}, {"_id": 0})
+        if proof:
+            click["proof_submitted"] = True
+            click["proof_data"] = proof
+        else:
+            click["proof_submitted"] = False
+    
     return clicks
+
+@api_router.put("/admin/cashback-proofs/{proof_id}/update-status")
+async def update_proof_status(proof_id: str, status: str, admin_user = Depends(get_admin_user)):
+    valid_statuses = ["pending_review", "review_completed", "review_live", "approved"]
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    
+    proof = await db.cashback_proofs.find_one({"id": proof_id}, {"_id": 0})
+    if not proof:
+        raise HTTPException(status_code=404, detail="Proof not found")
+    
+    update_data = {"status": status}
+    
+    if status == "review_completed":
+        update_data["review_completed"] = True
+    elif status == "review_live":
+        update_data["review_live"] = True
+        update_data["review_completed"] = True
+    elif status == "approved":
+        update_data["refund_processed"] = True
+        update_data["review_live"] = True
+        update_data["review_completed"] = True
+        
+        # Process cashback - mark as verified and paid
+        click = await db.cashback_clicks.find_one({"id": proof["cashback_click_id"]}, {"_id": 0})
+        if click:
+            product = await db.cashback_products.find_one({"id": click["product_id"]}, {"_id": 0})
+            if product:
+                cashback_amount = product["cashback_amount"]
+                
+                # Credit to user wallet
+                await db.users.update_one(
+                    {"id": proof["user_id"]},
+                    {"$inc": {"wallet_balance": cashback_amount}}
+                )
+                
+                # Mark click as verified and paid
+                await db.cashback_clicks.update_one(
+                    {"id": proof["cashback_click_id"]},
+                    {"$set": {"verified": True, "cashback_paid": True}}
+                )
+                
+                # Create transaction
+                await db.transactions.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "user_id": proof["user_id"],
+                    "type": "earning",
+                    "amount": cashback_amount,
+                    "status": "completed",
+                    "description": f"Cashback from {product['title']}",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+                
+                # Notify user
+                await db.notifications.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "user_id": proof["user_id"],
+                    "title": "Cashback Processed!",
+                    "message": f"₹{cashback_amount} cashback credited to your wallet for Order #{proof['order_id']}",
+                    "read": False,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+    
+    await db.cashback_proofs.update_one(
+        {"id": proof_id},
+        {"$set": update_data}
+    )
+    
+    # Notify user about status update
+    status_messages = {
+        "review_completed": "Your review has been verified!",
+        "review_live": "Your review is now live!",
+        "approved": "Your cashback has been processed!"
+    }
+    
+    if status in status_messages:
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": proof["user_id"],
+            "title": "Cashback Status Update",
+            "message": status_messages[status],
+            "read": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+    
+    return {"success": True}
 
 @api_router.put("/admin/cashback-clicks/{click_id}/verify")
 async def verify_cashback_click(click_id: str, admin_user = Depends(get_admin_user)):

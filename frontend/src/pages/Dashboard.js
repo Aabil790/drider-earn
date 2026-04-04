@@ -5,6 +5,7 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Wallet, Video, Gift, ShoppingBag, Users, TrendingUp, ExternalLink, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -22,6 +23,7 @@ const Dashboard = () => {
   const [copied, setCopied] = useState(false);
   const [myRank, setMyRank] = useState(null);
   const [topEarners, setTopEarners] = useState([]);
+  const [leaderboardFilter, setLeaderboardFilter] = useState('all');
 
   useEffect(() => {
     if (!user.is_paid) {
@@ -71,9 +73,9 @@ const Dashboard = () => {
     }
   };
 
-  const fetchTopEarners = async () => {
+  const fetchTopEarners = async (filter = 'all') => {
     try {
-      const response = await api.get('/leaderboard/top-earners?limit=20');
+      const response = await api.get(`/leaderboard/top-earners?limit=20&filter=${filter}`);
       setTopEarners(response.data);
     } catch (error) {
       console.error('Failed to fetch top earners');
@@ -228,7 +230,18 @@ const Dashboard = () => {
               <div className="text-3xl font-bold text-gray-900" data-testid="referral-earnings">
                 ₹{stats.total_earnings.toFixed(2)}
               </div>
-              <p className="text-sm text-gray-500 mt-2">From referrals</p>
+              <div className="mt-2 space-y-1">
+                {stats.basic_plan_referrals > 0 && (
+                  <p className="text-xs text-gray-600">
+                    Basic (30%): ₹{stats.basic_plan_earnings.toFixed(2)} from {stats.basic_plan_referrals} refs
+                  </p>
+                )}
+                {stats.premium_plan_referrals > 0 && (
+                  <p className="text-xs text-gray-600">
+                    Premium (40%): ₹{stats.premium_plan_earnings.toFixed(2)} from {stats.premium_plan_referrals} refs
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -348,45 +361,66 @@ const Dashboard = () => {
               <CardDescription>See who's leading the earnings race!</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {topEarners.map((earner) => (
-                  <div
-                    key={earner.user_id}
-                    className={`flex items-center justify-between p-3 rounded-lg ${
-                      earner.user_id === user.id
-                        ? 'bg-yellow-100 border-2 border-yellow-500'
-                        : earner.rank <= 3
-                        ? 'bg-gradient-to-r from-yellow-50 to-orange-50'
-                        : 'bg-gray-50'
-                    }`}
-                    data-testid={`leaderboard-rank-${earner.rank}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                        earner.rank === 1 ? 'bg-yellow-500 text-white' :
-                        earner.rank === 2 ? 'bg-gray-300 text-gray-800' :
-                        earner.rank === 3 ? 'bg-orange-400 text-white' :
-                        'bg-gray-200 text-gray-700'
-                      }`}>
-                        {earner.rank === 1 ? '🏆' : earner.rank === 2 ? '🥈' : earner.rank === 3 ? '🥉' : `#${earner.rank}`}
-                      </div>
-                      <div>
-                        <p className="font-semibold">
-                          {earner.user_id === user.id ? `${earner.name} (You)` : earner.name}
-                        </p>
-                        {earner.rank <= 3 && (
-                          <p className="text-xs text-gray-600">
-                            {earner.rank === 1 ? 'Top Earner 💪' : earner.rank === 2 ? 'Amazing!' : 'Great Job!'}
+              <Tabs value={leaderboardFilter} onValueChange={(value) => {
+                setLeaderboardFilter(value);
+                fetchTopEarners(value);
+              }}>
+                <TabsList className="mb-6">
+                  <TabsTrigger value="all">All Time</TabsTrigger>
+                  <TabsTrigger value="monthly">This Month</TabsTrigger>
+                  <TabsTrigger value="weekly">This Week</TabsTrigger>
+                  <TabsTrigger value="daily">Today</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value={leaderboardFilter}>
+                  <div className="space-y-2">
+                    {topEarners.map((earner) => (
+                      <div
+                        key={earner.user_id}
+                        className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all ${
+                          earner.user_id === user.id
+                            ? 'bg-yellow-100 border-2 border-yellow-500'
+                            : earner.rank <= 3
+                            ? 'bg-gradient-to-r from-yellow-50 to-orange-50 hover:shadow-md'
+                            : 'bg-gray-50 hover:bg-gray-100'
+                        }`}
+                        onClick={() => navigate(`/profile/${earner.user_id}`)}
+                        data-testid={`leaderboard-rank-${earner.rank}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                            earner.rank === 1 ? 'bg-yellow-500 text-white' :
+                            earner.rank === 2 ? 'bg-gray-300 text-gray-800' :
+                            earner.rank === 3 ? 'bg-orange-400 text-white' :
+                            'bg-gray-200 text-gray-700'
+                          }`}>
+                            {earner.rank === 1 ? '🏆' : earner.rank === 2 ? '🥈' : earner.rank === 3 ? '🥉' : `#${earner.rank}`}
+                          </div>
+                          <div>
+                            <p className="font-semibold">
+                              {earner.user_id === user.id ? `${earner.name} (You)` : earner.name}
+                            </p>
+                            {earner.rank <= 3 && (
+                              <p className="text-xs text-gray-600">
+                                {earner.rank === 1 ? 'Top Earner 💪' : earner.rank === 2 ? 'Amazing!' : 'Great Job!'}
+                              </p>
+                            )}
+                            <p className="text-xs text-gray-500 capitalize">
+                              {earner.membership_plan} member
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-yellow-600">
+                            ₹{typeof earner.earnings === 'number' ? earner.earnings.toFixed(2) : earner.earnings}
                           </p>
-                        )}
+                          <p className="text-xs text-gray-500">Click to view profile</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-yellow-600">₹{typeof earner.earnings === 'number' ? earner.earnings.toFixed(2) : earner.earnings}</p>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         )}

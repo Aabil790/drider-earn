@@ -71,6 +71,9 @@ const Navbar = () => {
               <Link to="/cashback" className="text-gray-700 hover:text-yellow-600 font-medium transition-colors" data-testid="nav-cashback">
                 Cashback
               </Link>
+              <Link to="/cashback-history" className="text-gray-700 hover:text-yellow-600 font-medium transition-colors" data-testid="nav-cashback-history">
+                History
+              </Link>
               <Link to="/store" className="text-gray-700 hover:text-yellow-600 font-medium transition-colors" data-testid="nav-store">
                 Store
               </Link>

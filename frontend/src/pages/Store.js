@@ -74,10 +74,22 @@ const Store = () => {
                 <CardContent className="p-4">
                   <CardTitle className="text-lg mb-2">{product.name}</CardTitle>
                   <CardDescription className="mb-4">{product.description}</CardDescription>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-2xl font-bold text-yellow-600">₹{product.price}</span>
-                    <span className="text-sm text-gray-500">{product.stock} in stock</span>
+                  <div className="mb-2">
+                    {product.original_price ? (
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-2xl font-bold text-yellow-600">₹{product.price}</span>
+                          <span className="text-sm text-gray-400 line-through">₹{product.original_price}</span>
+                        </div>
+                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">
+                          {product.discount_percent}% Premium Discount
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-2xl font-bold text-yellow-600">₹{product.price}</span>
+                    )}
                   </div>
+                  <div className="text-sm text-gray-500">{product.stock} in stock</div>
                 </CardContent>
                 <CardFooter>
                   <Button

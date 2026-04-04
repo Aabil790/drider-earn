@@ -14,6 +14,8 @@ import Store from '@/pages/Store';
 import Wallet from '@/pages/Wallet';
 import Orders from '@/pages/Orders';
 import AdminDashboard from '@/pages/AdminDashboard';
+import UserProfile from '@/pages/UserProfile';
+import CashbackHistory from '@/pages/CashbackHistory';
 import '@/App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -101,6 +103,22 @@ const AppContent = () => {
               <AdminRoute>
                 <AdminDashboard />
               </AdminRoute>
+            }
+          />
+          <Route
+            path="/profile/:userId"
+            element={
+              <PrivateRoute>
+                <UserProfile />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/cashback-history"
+            element={
+              <PrivateRoute>
+                <CashbackHistory />
+              </PrivateRoute>
             }
           />
         </Routes>

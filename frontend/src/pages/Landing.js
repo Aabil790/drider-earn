@@ -209,7 +209,8 @@ const Landing = () => {
                     earner.rank <= 3
                       ? 'bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-400'
                       : 'bg-white'
-                  } hover:shadow-md transition-shadow`}
+                  } hover:shadow-md transition-shadow cursor-pointer`}
+                  onClick={() => user && navigate(`/profile/${earner.user_id}`)}
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
