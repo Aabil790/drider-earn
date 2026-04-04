@@ -97,6 +97,7 @@ class VideoCreate(BaseModel):
     description: str
     youtube_url: str
     thumbnail: Optional[str] = None
+    is_free: bool = True
 
 class CashbackProductCreate(BaseModel):
     title: str
@@ -136,6 +137,23 @@ class CashbackProofSubmit(BaseModel):
     screenshot_url: str
     review_link: Optional[str] = None
     notes: Optional[str] = None
+
+class AddFundsRequest(BaseModel):
+    amount: float
+
+class CartItemAdd(BaseModel):
+    product_id: str
+    quantity: int = 1
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    mobile: Optional[str] = None
+    profile_picture: Optional[str] = None
+    bio: Optional[str] = None
+
+class PostCreate(BaseModel):
+    content: str
+    image_url: Optional[str] = None
 
 @api_router.get("/")
 async def root():
@@ -351,7 +369,21 @@ async def get_video_categories(current_user = Depends(get_current_user)):
 async def get_videos_by_category(category_id: str, current_user = Depends(get_current_user)):
     if not current_user["is_paid"]:
         raise HTTPException(status_code=403, detail="Membership required")
+    
     videos = await db.videos.find({"category_id": category_id}, {"_id": 0}).to_list(100)
+    
+    # Filter based on membership
+    if current_user["membership_plan"] != "premium":
+        # Basic users can only see free videos with full access
+        # Paid videos will show but with lock
+        for video in videos:
+            if not video.get("is_free", True):
+                video["locked"] = True
+    else:
+        # Premium users see all videos unlocked
+        for video in videos:
+            video["locked"] = False
+    
     return videos
 
 @api_router.get("/referrals/my-code")
@@ -676,16 +708,87 @@ async def request_withdrawal(req: WithdrawalRequest, current_user = Depends(get_
         "account_number": req.account_number,
         "ifsc_code": req.ifsc_code,
         "status": "pending",
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
     }
-    await db.withdrawal_requests.insert_one(withdrawal_doc)
+    result = await db.withdrawal_requests.insert_one(withdrawal_doc)
+    withdrawal_doc.pop('_id', None)
     
     await db.users.update_one(
         {"id": current_user["id"]},
         {"$inc": {"wallet_balance": -req.amount}}
     )
     
-    return {"success": True, "message": "Withdrawal request submitted"}
+    return {"success": True, "message": "Withdrawal request submitted", "withdrawal": withdrawal_doc}
+
+@api_router.get("/wallet/withdrawal-history")
+async def get_withdrawal_history(current_user = Depends(get_current_user)):
+    withdrawals = await db.withdrawal_requests.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return withdrawals
+
+@api_router.post("/wallet/add-funds")
+async def add_funds_to_wallet(req: AddFundsRequest, current_user = Depends(get_current_user)):
+    # Create Razorpay order for adding funds
+    amount_paisa = int(req.amount * 100)
+    
+    order_data = {
+        "amount": amount_paisa,
+        "currency": "INR",
+        "receipt": f"topup_{current_user['id'][:20]}",
+        "notes": {
+            "user_id": current_user["id"],
+            "type": "wallet_topup"
+        }
+    }
+    
+    try:
+        order = razorpay_client.order.create(data=order_data)
+        return {
+            "order_id": order["id"],
+            "amount": order["amount"],
+            "currency": order["currency"],
+            "razorpay_key_id": razorpay_key_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create topup order: {str(e)}")
+
+@api_router.post("/wallet/verify-topup")
+async def verify_wallet_topup(req: VerifyPaymentRequest, current_user = Depends(get_current_user)):
+    try:
+        params_dict = {
+            "razorpay_order_id": req.razorpay_order_id,
+            "razorpay_payment_id": req.razorpay_payment_id,
+            "razorpay_signature": req.razorpay_signature
+        }
+        razorpay_client.utility.verify_payment_signature(params_dict)
+        
+        # Get order details to find amount
+        order = razorpay_client.order.fetch(req.razorpay_order_id)
+        amount = order["amount"] / 100
+        
+        # Add funds to wallet
+        await db.users.update_one(
+            {"id": current_user["id"]},
+            {"$inc": {"wallet_balance": amount}}
+        )
+        
+        # Record transaction
+        await db.transactions.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": current_user["id"],
+            "type": "topup",
+            "amount": amount,
+            "status": "completed",
+            "description": "Wallet top-up",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {"success": True, "amount": amount}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Payment verification failed")
 
 @api_router.get("/notifications")
 async def get_notifications(current_user = Depends(get_current_user)):
@@ -697,6 +800,189 @@ async def mark_notification_read(notification_id: str, current_user = Depends(ge
     await db.notifications.update_one(
         {"id": notification_id, "user_id": current_user["id"]},
         {"$set": {"read": True}}
+    )
+    return {"success": True}
+
+# Cart endpoints
+@api_router.get("/cart")
+async def get_cart(current_user = Depends(get_current_user)):
+    cart_items = await db.cart.find({"user_id": current_user["id"]}, {"_id": 0}).to_list(100)
+    
+    # Enrich with product details
+    for item in cart_items:
+        product = await db.ecommerce_products.find_one({"id": item["product_id"]}, {"_id": 0})
+        if product:
+            # Apply plan-based pricing
+            base_price = product.get("price", 0)
+            if current_user["membership_plan"] == "premium":
+                product["price"] = round(base_price * 0.85, 2)
+                product["original_price"] = base_price
+            item["product"] = product
+    
+    return cart_items
+
+@api_router.post("/cart/add")
+async def add_to_cart(req: CartItemAdd, current_user = Depends(get_current_user)):
+    # Check if product exists
+    product = await db.ecommerce_products.find_one({"id": req.product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Check if already in cart
+    existing = await db.cart.find_one({"user_id": current_user["id"], "product_id": req.product_id}, {"_id": 0})
+    if existing:
+        # Update quantity
+        await db.cart.update_one(
+            {"user_id": current_user["id"], "product_id": req.product_id},
+            {"$inc": {"quantity": req.quantity}}
+        )
+    else:
+        # Add new item
+        cart_doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": current_user["id"],
+            "product_id": req.product_id,
+            "quantity": req.quantity,
+            "added_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.cart.insert_one(cart_doc)
+    
+    return {"success": True, "message": "Added to cart"}
+
+@api_router.delete("/cart/{item_id}")
+async def remove_from_cart(item_id: str, current_user = Depends(get_current_user)):
+    await db.cart.delete_one({"id": item_id, "user_id": current_user["id"]})
+    return {"success": True}
+
+@api_router.post("/cart/checkout")
+async def checkout_cart(current_user = Depends(get_current_user)):
+    cart_items = await db.cart.find({"user_id": current_user["id"]}, {"_id": 0}).to_list(100)
+    
+    if not cart_items:
+        raise HTTPException(status_code=400, detail="Cart is empty")
+    
+    total_amount = 0
+    orders = []
+    
+    for item in cart_items:
+        product = await db.ecommerce_products.find_one({"id": item["product_id"]}, {"_id": 0})
+        if not product:
+            continue
+        
+        # Apply plan-based pricing
+        price = product["price"]
+        if current_user["membership_plan"] == "premium":
+            price = round(price * 0.85, 2)
+        
+        item_total = price * item["quantity"]
+        total_amount += item_total
+        
+        # Create order
+        order_doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": current_user["id"],
+            "product_id": item["product_id"],
+            "quantity": item["quantity"],
+            "total_amount": item_total,
+            "status": "pending",
+            "tracking_id": None,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.orders.insert_one(order_doc)
+        orders.append(order_doc)
+        
+        # Update stock
+        await db.ecommerce_products.update_one(
+            {"id": item["product_id"]},
+            {"$inc": {"stock": -item["quantity"]}}
+        )
+    
+    # Clear cart
+    await db.cart.delete_many({"user_id": current_user["id"]})
+    
+    # Deduct from wallet
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$inc": {"wallet_balance": -total_amount}}
+    )
+    
+    # Record transaction
+    await db.transactions.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "type": "purchase",
+        "amount": total_amount,
+        "status": "completed",
+        "description": f"Purchase of {len(orders)} items",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {"success": True, "orders": orders, "total_amount": total_amount}
+
+# Profile endpoints
+@api_router.get("/profile/me")
+async def get_my_profile(current_user = Depends(get_current_user)):
+    return {
+        "id": current_user["id"],
+        "name": current_user["name"],
+        "email": current_user["email"],
+        "mobile": current_user["mobile"],
+        "profile_picture": current_user.get("profile_picture"),
+        "bio": current_user.get("bio"),
+        "membership_plan": current_user["membership_plan"],
+        "wallet_balance": current_user["wallet_balance"],
+        "referral_code": current_user["referral_code"],
+        "created_at": current_user["created_at"]
+    }
+
+@api_router.put("/profile/update")
+async def update_profile(req: ProfileUpdate, current_user = Depends(get_current_user)):
+    update_data = {}
+    if req.name:
+        update_data["name"] = req.name
+    if req.mobile:
+        update_data["mobile"] = req.mobile
+    if req.profile_picture:
+        update_data["profile_picture"] = req.profile_picture
+    if req.bio:
+        update_data["bio"] = req.bio
+    
+    if update_data:
+        await db.users.update_one(
+            {"id": current_user["id"]},
+            {"$set": update_data}
+        )
+    
+    return {"success": True, "message": "Profile updated"}
+
+# Social Feed endpoints
+@api_router.post("/posts/create")
+async def create_post(req: PostCreate, current_user = Depends(get_current_user)):
+    post_doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "user_name": current_user["name"],
+        "user_profile_picture": current_user.get("profile_picture"),
+        "content": req.content,
+        "image_url": req.image_url,
+        "likes": 0,
+        "comments_count": 0,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    result = await db.posts.insert_one(post_doc)
+    post_doc.pop('_id', None)
+    return post_doc
+
+@api_router.get("/posts/feed")
+async def get_feed(current_user = Depends(get_current_user), skip: int = 0, limit: int = 20):
+    posts = await db.posts.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return posts
+
+@api_router.post("/posts/{post_id}/like")
+async def like_post(post_id: str, current_user = Depends(get_current_user)):
+    await db.posts.update_one(
+        {"id": post_id},
+        {"$inc": {"likes": 1}}
     )
     return {"success": True}
 
@@ -747,6 +1033,7 @@ async def create_video(req: VideoCreate, admin_user = Depends(get_admin_user)):
         "description": req.description,
         "youtube_url": req.youtube_url,
         "thumbnail": req.thumbnail,
+        "is_free": req.is_free,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     result = await db.videos.insert_one(video_doc)
@@ -800,7 +1087,7 @@ async def approve_withdrawal(request_id: str, admin_user = Depends(get_admin_use
     
     await db.withdrawal_requests.update_one(
         {"id": request_id},
-        {"$set": {"status": "approved"}}
+        {"$set": {"status": "approved", "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
     
     await db.transactions.insert_one({
@@ -810,6 +1097,43 @@ async def approve_withdrawal(request_id: str, admin_user = Depends(get_admin_use
         "amount": withdrawal["amount"],
         "status": "completed",
         "description": "Withdrawal processed",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": withdrawal["user_id"],
+        "title": "Withdrawal Approved",
+        "message": f"Your withdrawal of ₹{withdrawal['amount']} has been approved and processed.",
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {"success": True}
+
+@api_router.put("/admin/withdrawal-requests/{request_id}/reject")
+async def reject_withdrawal(request_id: str, admin_user = Depends(get_admin_user)):
+    withdrawal = await db.withdrawal_requests.find_one({"id": request_id}, {"_id": 0})
+    if not withdrawal:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    await db.withdrawal_requests.update_one(
+        {"id": request_id},
+        {"$set": {"status": "rejected", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Refund amount back to wallet
+    await db.users.update_one(
+        {"id": withdrawal["user_id"]},
+        {"$inc": {"wallet_balance": withdrawal["amount"]}}
+    )
+    
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": withdrawal["user_id"],
+        "title": "Withdrawal Rejected",
+        "message": f"Your withdrawal request of ₹{withdrawal['amount']} has been rejected. Amount refunded to wallet.",
+        "read": False,
         "created_at": datetime.now(timezone.utc).isoformat()
     })
     
