@@ -1,53 +1,123 @@
-import { useEffect } from "react";
-import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { Toaster } from '@/components/ui/sonner';
+import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
+import Landing from '@/pages/Landing';
+import Login from '@/pages/Login';
+import Signup from '@/pages/Signup';
+import Dashboard from '@/pages/Dashboard';
+import Training from '@/pages/Training';
+import Cashback from '@/pages/Cashback';
+import Store from '@/pages/Store';
+import Wallet from '@/pages/Wallet';
+import Orders from '@/pages/Orders';
+import AdminDashboard from '@/pages/AdminDashboard';
+import '@/App.css';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const PrivateRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
+  
+  return user ? children : <Navigate to="/login" />;
+};
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+const AdminRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
+  
+  return user && user.role === 'admin' ? children : <Navigate to="/dashboard" />;
+};
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
+const AppContent = () => {
+  const { user } = useAuth();
+  
   return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
+    <div className="min-h-screen flex flex-col">
+      {user && <Navbar />}
+      <main className="flex-grow">
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route
+            path="/dashboard"
+            element={
+              <PrivateRoute>
+                <Dashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/training"
+            element={
+              <PrivateRoute>
+                <Training />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/cashback"
+            element={
+              <PrivateRoute>
+                <Cashback />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/store"
+            element={
+              <PrivateRoute>
+                <Store />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/wallet"
+            element={
+              <PrivateRoute>
+                <Wallet />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <PrivateRoute>
+                <Orders />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <AdminRoute>
+                <AdminDashboard />
+              </AdminRoute>
+            }
+          />
+        </Routes>
+      </main>
+      {user && <Footer />}
+      <Toaster position="top-right" />
     </div>
   );
 };
 
 function App() {
   return (
-    <div className="App">
+    <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
+        <AppContent />
       </BrowserRouter>
-    </div>
+    </AuthProvider>
   );
 }
 
