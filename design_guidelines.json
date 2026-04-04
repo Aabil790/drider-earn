@@ -1,0 +1,120 @@
+{
+  "theme": "light",
+  "archetype": "4 (Swiss & High-Contrast) customized with Golden/Yellow accents",
+  "typography": {
+    "heading_font": "Outfit",
+    "body_font": "Manrope",
+    "font_weights": {
+      "headings": "700",
+      "body": "400",
+      "cta": "600"
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight",
+      "h3": "text-xl sm:text-2xl tracking-tight",
+      "h4": "text-lg sm:text-xl",
+      "body": "text-base leading-relaxed",
+      "labels": "text-xs uppercase tracking-[0.2em] font-bold"
+    }
+  },
+  "colors": {
+    "primary": "#F59E0B",
+    "primary_hover": "#D97706",
+    "primary_foreground": "#0A0A0A",
+    "background": "#FFFFFF",
+    "surface": "#F9FAFB",
+    "text_main": "#111827",
+    "text_muted": "#6B7280",
+    "border": "#E5E7EB",
+    "success": "#10B981",
+    "warning": "#F59E0B",
+    "error": "#EF4444"
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "p-4, p-6, p-8, p-12, p-16, p-24",
+    "dashboard_grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+    "marketing_grid": "grid-cols-1 md:grid-cols-8 lg:grid-cols-12 gap-8",
+    "border_radius": "rounded-xl",
+    "shadows": {
+      "ambient": "shadow-sm",
+      "hover": "shadow-md -translate-y-1 transition-all duration-300"
+    }
+  },
+  "surfaces": {
+    "cards": "bg-white border border-gray-200 rounded-xl p-6",
+    "header": "backdrop-blur-xl bg-white/90 border-b border-gray-100 sticky top-0 z-50",
+    "footer": "bg-gray-50 border-t border-gray-200 py-16"
+  },
+  "components": {
+    "buttons": "bg-yellow-500 text-black hover:bg-yellow-400 font-semibold px-6 py-3 rounded-xl transition-colors inline-flex items-center justify-center gap-2",
+    "inputs": "bg-white border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none text-gray-900",
+    "badges": "bg-yellow-100 text-yellow-800 text-xs font-bold px-2 py-1 rounded-md uppercase tracking-wide",
+    "tables": "w-full text-left border-collapse",
+    "icons_library": "lucide-react"
+  },
+  "motion_and_interactions": {
+    "hover_state": "hover:bg-yellow-400 hover:text-black transition-colors duration-200",
+    "focus_state": "focus:ring-2 focus:ring-yellow-500 focus:outline-none focus:ring-offset-2",
+    "page_transition": "animate-in fade-in slide-in-from-bottom-4 duration-500"
+  },
+  "media": {
+    "logos": {
+      "primary": "https://customer-assets.emergentagent.com/job_drider-earn/artifacts/ryu8mebh_1000822994.png"
+    },
+    "hero_backgrounds": [
+      {
+        "url": "https://images.unsplash.com/photo-1761682708083-59278ed18c42?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjh8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHllbGxvdyUyMG1vZGVybiUyMGNsZWFuJTIwYmFja2dyb3VuZHxlbnwwfHx8fDE3NzUyODgwODJ8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Abstract yellow geometric shadow background for marketing hero section",
+        "category": "hero"
+      }
+    ],
+    "finance_earning": [
+      {
+        "url": "https://images.unsplash.com/photo-1738996747326-65b5d7d7fe9b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjV8MHwxfHNlYXJjaHwxfHxnb2xkJTIwY29pbnMlMjBncm93dGglMjBncmFwaCUyMGZpbmFuY2V8ZW58MHx8fHwxNzc1Mjg4MDgyfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Person holding coin in front of computer, great for earning/cashback section",
+        "category": "feature"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1737442528819-5526652236e8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjV8MHwxfHNlYXJjaHwyfHxnb2xkJTIwY29pbnMlMjBncm93dGglMjBncmFwaCUyMGZpbmFuY2V8ZW58MHx8fHwxNzc1Mjg4MDgyfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Person pointing at growth chart, ideal for dashboard or analytics",
+        "category": "dashboard"
+      }
+    ],
+    "products": [
+      {
+        "url": "https://images.unsplash.com/photo-1676570092589-a6c09ecbb373?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBlY29tbWVyY2UlMjBwcm9kdWN0cyUyMGlzb2xhdGVkfGVufDB8fHx8MTc3NTI4ODA3OHww&ixlib=rb-4.1.0&q=85",
+        "description": "Cosmetics, usable for e-commerce placeholder",
+        "category": "ecommerce"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1572784040789-304f4cdacd62?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBlY29tbWVyY2UlMjBwcm9kdWN0cyUyMGlzb2xhdGVkfGVufDB8fHx8MTc3NTI4ODA3OHww&ixlib=rb-4.1.0&q=85",
+        "description": "Electronics, usable for e-commerce placeholder",
+        "category": "ecommerce"
+      }
+    ],
+    "training": [
+      {
+        "url": "https://images.pexels.com/photos/7181175/pexels-photo-7181175.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Two colleagues engaging in an online meeting, used for video training thumbnails",
+        "category": "training"
+      }
+    ]
+  },
+  "accessibility": {
+    "contrast_strategy": "Ensure text over golden accents is pure black (#0A0A0A) for readability. Use dark charcoal (#111827) for main body text.",
+    "focus_rings": "Visible focus rings (yellow-500) around interactive elements.",
+    "testing": "All interactive elements must include data-testid attributes."
+  },
+  "instructions_to_main_agent": [
+    "Load 'Outfit' font for headings and 'Manrope' for body text via Google Fonts in index.html.",
+    "Apply 'font-sans' to body. Configure Tailwind theme.fontFamily to use Outfit for 'heading' and Manrope for 'sans'.",
+    "Use pure white cards with a very light gray border (border-gray-200) and rounded-xl corners over a slightly off-white (bg-gray-50) background to make cards pop naturally without heavy shadows.",
+    "Implement a sticky glassmorphism header. Ensure there is a 'Join WhatsApp Group' button for paid users that redirects appropriately.",
+    "For the E-commerce and Cashback product grids, use CSS grid with generous spacing (gap-6 or gap-8) and keep image heights consistent via aspect-ratio utilities.",
+    "The admin dashboard should use a dense 'Control Room' grid layout.",
+    "DO NOT use generic template designs; embed character into the UI with uppercase tracking-wide labels for small meta-info and fluid typography for large numbers/balances.",
+    "Use the provided logo exclusively. If an icon is needed for a brand element, use lucide-react.",
+    "Follow standard HTML+Tailwind for generic layouts, use Shadcn for complex interactives (dialogs, tabs, dropdowns)."
+  ]
+}
