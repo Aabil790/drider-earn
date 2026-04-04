@@ -476,7 +476,8 @@ async def create_video_category(req: VideoCategoryCreate, admin_user = Depends(g
         "description": req.description,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    await db.video_categories.insert_one(category_doc)
+    result = await db.video_categories.insert_one(category_doc)
+    category_doc.pop('_id', None)
     return category_doc
 
 @api_router.post("/admin/videos")
@@ -490,7 +491,8 @@ async def create_video(req: VideoCreate, admin_user = Depends(get_admin_user)):
         "thumbnail": req.thumbnail,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    await db.videos.insert_one(video_doc)
+    result = await db.videos.insert_one(video_doc)
+    video_doc.pop('_id', None)
     return video_doc
 
 @api_router.post("/admin/cashback-products")
@@ -507,7 +509,8 @@ async def create_cashback_product(req: CashbackProductCreate, admin_user = Depen
         "status": "active",
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    await db.cashback_products.insert_one(product_doc)
+    result = await db.cashback_products.insert_one(product_doc)
+    product_doc.pop('_id', None)
     return product_doc
 
 @api_router.post("/admin/ecommerce-products")
@@ -522,7 +525,8 @@ async def create_ecommerce_product(req: EcommerceProductCreate, admin_user = Dep
         "category": req.category,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    await db.ecommerce_products.insert_one(product_doc)
+    result = await db.ecommerce_products.insert_one(product_doc)
+    product_doc.pop('_id', None)
     return product_doc
 
 @api_router.get("/admin/withdrawal-requests")

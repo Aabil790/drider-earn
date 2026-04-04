@@ -23,7 +23,12 @@ const Login = () => {
       const response = await api.post('/auth/login', { email, password });
       setUser(response.data.user, response.data.token);
       toast.success('Login successful!');
-      navigate('/dashboard');
+      
+      if (response.data.user.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Login failed');
     } finally {
